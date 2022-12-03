@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import os
+import signal
 from time import sleep
 from sys import argv
 
 ec_file="/sys/kernel/debug/ec/ec0/io"
 gpu_file="/sys/class/drm/card0/device/hwmon/"+os.listdir('/sys/class/drm/card0/device/hwmon/')[0]+"/temp2_input"
+ipc_file="/tmp/omen-fand.PID"
 
 fan1_offset=52 #0x34
 fan2_offset=53 #0x35
@@ -16,12 +18,19 @@ cpu_temp_offset=87 #0x57
 fan1_max=55
 fan2_max=57
 
-UpThreshold = [50, 60, 70, 80, 90, 95]
-DownThreshold = [48, 58, 66, 78, 86, 94]
+UpThreshold = [50, 60, 70, 80, 89, 95]
+DownThreshold = [48, 58, 66, 78, 87, 93]
 SpeedCurve = [20, 40, 60, 70, 85, 100]
 Ambient = 0
 Linear = 0
 PollInterval = 1
+
+doLoop = True
+
+def SigHandler(signal, frame):
+    os.remove("/tmp/omen-fand.PID")
+    global doLoop
+    doLoop = False
 
 def UpdateFan(speed1, speed2):
     with open(ec_file, "r+b") as ec:
@@ -38,10 +47,16 @@ def GetTemp():
         tempg = int(gpu.read())/1000
     return max(tempc, tempg)
 
+signal.signal(signal.SIGTERM, SigHandler)
+
+with open(ipc_file, "w") as ipc:
+    ipc.write(str(os.getpid()))
+    
+
 if Linear == 0:
     index = -1
     oldspeed = -1
-    while True:
+    while doLoop:
         temp=GetTemp()
         while index != 5 and temp > UpThreshold[index+1]:
             index+=1
@@ -56,9 +71,5 @@ if Linear == 0:
         if oldspeed != speed:
             oldspeed=speed
             UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
-            os.system('clear')
-            print("Last Update")
-            print(f"Speed={speed}")
-            print(f"Temp={temp}")
         
         sleep(PollInterval)
