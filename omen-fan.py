@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
 import os
+import subprocess
+import signal
 from time import sleep
 from sys import argv
 
 ec_file="/sys/kernel/debug/ec/ec0/io"
+ipc_file="/tmp/omen-fand.PID"
 
 fan1_offset=52 #0x34
 fan2_offset=53 #0x35
@@ -16,7 +19,7 @@ fan2_max=57
 
 if (os.geteuid() != 0):
     print("  This program should be run as root")
-    exit()
+    exit(1)
 
 def UpdateFan(speed1, speed2):
     BiosControl('0')
@@ -46,8 +49,8 @@ def BiosControl(enabled):
             ec.seek(fan2_offset)
             ec.write(bytes([0]))
     else:
-        print("ERROR: Needs a boolean value (0 or 1)")
-        exit()
+        print("  ERROR: Needs a boolean value (0 or 1)")
+        exit(1)
 
 def ParseRPM(rpm, fan, max):
     isPercent=0
@@ -58,31 +61,31 @@ def ParseRPM(rpm, fan, max):
         rpm=int(rpm)
     except ValueError:
         print(f"  ERROR: \'{rpm}\' is not a valid integer.")
-        exit()
+        exit(1)
 
     if isPercent == 1 and (rpm < 0 or rpm > 100):
         print(f"  ERROR: \'{rpm}\' is not a valid percentage.")
-        exit()
+        exit(1)
     elif isPercent == 1:
         return int(max*rpm/100)
     elif rpm<=max and rpm>=0:
         return int(rpm)
     else:
         print(f"  ERROR: \'{rpm}\' is not a valid RPM/100 value for Fan{fan}. Min: 0 Max: {max}")
-        exit()
+        exit(1)
 
 def NI(var):
     print("    :) Need to implement subcommand", var)
 
 if len(argv) == 1 or argv[1] in ('help', 'h'):
     print("Usage:")
-    print(f"    {argv[0]} <subcommand> <argument>")
-    print(f"    {argv[0]} bios-control 1")
-    print(f"    {argv[0]} b 1")
+    print(f"    omen-fan <subcommand> <argument>")
+    print(f"    omen-fan bios-control 1")
+    print(f"    omen-fan b 1")
 
     print("\nSubcommands:")
     print("    bios-control (b)        Enable/Disable BIOS control")
-    print("    configure    (c)        Configure Fan curves")
+    print("    configure    (c)        Configure Fan curves for service")
     print("    start/stop   (e/d)      Starts/Stops Fan management service")
     print("    help         (h)        Prints current dialogue")
     print("    info         (i)        Gets Fan status")
@@ -92,7 +95,7 @@ if len(argv) == 1 or argv[1] in ('help', 'h'):
 
 elif argv[1] in ('bios-control', 'b'):
     if len(argv) < 3:
-        print(f"Subcommand \'{argv[1]}\' needs another argument")
+        print(f"  Subcommand \'{argv[1]}\' needs another argument")
     else:
         BiosControl(argv[2])
 
@@ -100,19 +103,47 @@ elif argv[1] in ('configure', 'config', 'c'):
     NI(argv[1])
 
 elif argv[1] in ('start', 'e'):
-    NI(argv[1])
+    if(os.path.isfile(ipc_file)):
+        ipc = open(ipc_file, "r")
+        print(f"  omen-fan service is already running with PID:{ipc.read()}")
+    else:
+        BiosControl('0')
+        subprocess.Popen('omen-fand')
+        print("  omen-fan service has been started")
 
 elif argv[1] in ('stop', 'd'):
-    NI(argv[1])
+    if(os.path.isfile(ipc_file)):
+        ipc = open(ipc_file, "r")
+        os.kill(int(ipc.read()), signal.SIGTERM)
+        print("  omen-fan service has been stopped")
+        BiosControl('1')
+    else:
+        print("  omen-fan service is not running")
+        
 
 elif argv[1] in ('info', 'i'):
-    NI(argv[1])
+    if(os.path.isfile(ipc_file)):
+        ipc = open(ipc_file, "r")
+        print(f"  Service Status : Running (PID: {ipc.read()})")
+    else:
+        print("  Service Status : Stopped")
+    
+    ec = open(ec_file, "rb")
+    ec.seek(bios_offset)
+    if(int.from_bytes(ec.read(1), 'big') == 6):
+        print("  BIOS Control : Disabled")
+        ec.seek(fan1_offset)
+        print(f"  Fan 1 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+        ec.seek(fan2_offset)
+        print(f"  Fan 2 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+    else:
+        print("  BIOS Control : Enabled")
 
 elif argv[1] in ('set', 's'):
     if len(argv) < 3:
         print("Usage:")
-        print(f"  \'{argv[0]} {argv[1]} <fan-speed>\'")
-        print(f"  \'{argv[0]} {argv[1]} <fan1-speed> <fan2-speed>\'")
+        print(f"  \'omen-fan {argv[1]} <fan-speed>\'")
+        print(f"  \'omen-fan {argv[1]} <fan1-speed> <fan2-speed>\'")
     elif len(argv) > 3:
         UpdateFan(ParseRPM(argv[2], 1, fan1_max), ParseRPM(argv[3], 2, fan2_max))
     else:
@@ -124,5 +155,5 @@ elif argv[1] in ('version', 'v'):
     print("  Beta software, use at your own risk")
 
 else:
-    print(f"\'{argv[1]}\' is not a valid argument.")
-    print(f"Use \'{argv[0]} help\' to get usage.")
+    print(f"  \'{argv[1]}\' is not a valid argument.")
+    print(f"  Use \'omen-fan help\' to get usage.")
