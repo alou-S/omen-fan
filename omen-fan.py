@@ -114,7 +114,15 @@ elif argv[1] in ('start', 'e'):
 elif argv[1] in ('stop', 'd'):
     if(os.path.isfile(ipc_file)):
         ipc = open(ipc_file, "r")
-        os.kill(int(ipc.read()), signal.SIGTERM)
+        
+        try:
+            os.kill(int(ipc.read()), signal.SIGTERM)
+        except ProcessLookupError:
+            print(" PID file exists without process.")
+            print(" omen-fan service was killed unexpectedly.")
+            os.remove("/tmp/omen-fand.PID")
+            exit(1)
+
         print("  omen-fan service has been stopped")
         BiosControl('1')
     else:
