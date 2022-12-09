@@ -22,7 +22,7 @@ UpThreshold = [50, 60, 70, 80, 89, 95]
 DownThreshold = [48, 58, 66, 78, 87, 93]
 SpeedCurve = [20, 40, 60, 70, 85, 100]
 Ambient = 0
-Linear = 0
+Linear = 1
 PollInterval = 1
 
 doLoop = True
@@ -72,4 +72,26 @@ if Linear == 0:
             oldspeed=speed
             UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
         
+        sleep(PollInterval)
+elif Linear == 1:
+    index = -1
+    oldspeed = -1
+    while doLoop:
+        temp=GetTemp()
+        while index != 5 and temp > UpThreshold[index+1]:
+            index+=1
+        while index != -1 and temp < UpThreshold[index]:
+            index-=1
+
+        if index == -1:
+            speed=Ambient
+        elif index == 5:
+            speed=SpeedCurve[index]
+        else:
+            speed=SpeedCurve[index]+((SpeedCurve[index+1]-SpeedCurve[index])*(1-(UpThreshold[index+1]-temp)/(UpThreshold[index+1]-UpThreshold[index])))
+        
+        if oldspeed != speed:
+            oldspeed=speed
+            UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
+            
         sleep(PollInterval)
