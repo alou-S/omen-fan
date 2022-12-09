@@ -8,11 +8,13 @@ from sys import argv
 
 ec_file="/sys/kernel/debug/ec/ec0/io"
 ipc_file="/tmp/omen-fand.PID"
+boost_file="/sys/class/hwmon/"+os.listdir('/sys/devices/platform/hp-wmi/hwmon/')[0]+"/pwm1_enable"
 
 fan1_offset=52 #0x34
 fan2_offset=53 #0x35
 bios_offset=98 #0x62
 timer_offset=99 #0x63
+boost_offset=236 #0xEC
 
 fan1_max=55
 fan2_max=57
@@ -20,6 +22,9 @@ fan2_max=57
 if (os.geteuid() != 0):
     print("  This program should be run as root")
     exit(1)
+
+if 'ec_sys' not in str(subprocess.check_output('lsmod')):
+    subprocess.run(['modprobe', 'ec_sys', 'write_support=1'])
 
 def UpdateFan(speed1, speed2):
     BiosControl('0')
@@ -85,6 +90,7 @@ if len(argv) == 1 or argv[1] in ('help', 'h'):
 
     print("\nSubcommands:")
     print("    bios-control (b)        Enable/Disable BIOS control")
+    print("    boost        (x)        Enables boost mode via sysfs")
     print("    configure    (c)        Configure Fan curves for service")
     print("    start/stop   (e/d)      Starts/Stops Fan management service")
     print("    help         (h)        Prints current dialogue")
@@ -98,6 +104,20 @@ elif argv[1] in ('bios-control', 'b'):
         print(f"  Subcommand \'{argv[1]}\' needs another argument")
     else:
         BiosControl(argv[2])
+
+elif argv[1] in ('boost', 'x'):
+    if len(argv) < 3:
+        print(f"  Subcommand \'{argv[1]}\' needs another argument")
+    elif argv[2] == '0':
+        with open(boost_file, 'r+') as boost:
+            boost.write('2')
+    elif argv[2] == '1':
+        with open(boost_file, 'r+') as boost:
+            boost.write('0')
+    else:
+        print("  ERROR: Needs a boolean value (0 or 1)")
+        exit(1)
+
 
 elif argv[1] in ('configure', 'config', 'c'):
     NI(argv[1])
@@ -114,7 +134,7 @@ elif argv[1] in ('start', 'e'):
 elif argv[1] in ('stop', 'd'):
     if(os.path.isfile(ipc_file)):
         ipc = open(ipc_file, "r")
-        
+
         try:
             os.kill(int(ipc.read()), signal.SIGTERM)
         except ProcessLookupError:
@@ -137,15 +157,20 @@ elif argv[1] in ('info', 'i'):
         print("  Service Status : Stopped")
     
     ec = open(ec_file, "rb")
-    ec.seek(bios_offset)
-    if(int.from_bytes(ec.read(1), 'big') == 6):
-        print("  BIOS Control : Disabled")
-        ec.seek(fan1_offset)
-        print(f"  Fan 1 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
-        ec.seek(fan2_offset)
-        print(f"  Fan 2 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+    ec.seek(boost_offset)
+    if(int.from_bytes(ec.read(1), 'big') == 12):
+        print("  Fan Boost : Enalbed")
+        print("  Fan speeds are now maxed. BIOS and User controls are ignored")
     else:
-        print("  BIOS Control : Enabled")
+        ec.seek(bios_offset)
+        if(int.from_bytes(ec.read(1), 'big') == 6):
+            print("  BIOS Control : Disabled")
+            ec.seek(fan1_offset)
+            print(f"  Fan 1 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+            ec.seek(fan2_offset)
+            print(f"  Fan 2 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+        else:
+            print("  BIOS Control : Enabled")
 
 elif argv[1] in ('set', 's'):
     if len(argv) < 3:
