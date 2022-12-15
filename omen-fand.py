@@ -27,9 +27,6 @@ Ambient = 0
 Linear = 1
 PollInterval = 1
 
-doLoop = True
-cooldown = 0
-
 def SigHandler(signal, frame):
     os.remove("/tmp/omen-fand.PID")
     global doLoop
@@ -51,7 +48,7 @@ def GetTemp():
     state = open(gpu_state, "r")
     if cooldown < 1 and state.read() != "D3cold\n":
         busy = open(gpu_busy, "r")
-        if busy.read() == '0\n' :   
+        if busy.read() == '0\n':
             cooldown = 8
 
         with open(gpu_temp, "r") as temp:
@@ -77,47 +74,30 @@ signal.signal(signal.SIGTERM, SigHandler)
 with open(ipc_file, "w") as ipc:
     ipc.write(str(os.getpid()))
 
-if Linear == 0:
-    index = -1
-    oldspeed = -1
-    while doLoop:
-        temp=GetTemp()
-        while index != 5 and temp > UpThreshold[index+1]:
-            index+=1
-        while index != -1 and temp < DownThreshold[index]:
-            index-=1
+if Linear == 1:
+    DownThreshold = UpThreshold
+doLoop = True
+cooldown = 0
+index = -1
+oldspeed = -1
 
-        if index == -1:
-            speed=Ambient
-        else:
-            speed=SpeedCurve[index]
-        
-        if oldspeed != speed:
-            oldspeed=speed
-            UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
-        
-        BiosControl()
-        sleep(PollInterval)
-elif Linear == 1:
-    index = -1
-    oldspeed = -1
-    while doLoop:
-        temp=GetTemp()
-        while index != 5 and temp > UpThreshold[index+1]:
-            index+=1
-        while index != -1 and temp < UpThreshold[index]:
-            index-=1
+while doLoop:
+    temp=GetTemp()
+    while index != 5 and temp > UpThreshold[index+1]:
+        index+=1
+    while index != -1 and temp < DownThreshold[index]:
+        index-=1
 
-        if index == -1:
-            speed=Ambient
-        elif index == 5:
-            speed=SpeedCurve[index]
-        else:
-            speed=SpeedCurve[index]+((SpeedCurve[index+1]-SpeedCurve[index])*(1-(UpThreshold[index+1]-temp)/(UpThreshold[index+1]-UpThreshold[index])))
-        
-        if oldspeed != speed:
-            oldspeed=speed
-            UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
-        
-        BiosControl()    
-        sleep(PollInterval)
+    if index == -1:
+        speed=Ambient
+    elif Linear == 0 or index == 5:
+        speed=SpeedCurve[index]
+    else:
+        speed=SpeedCurve[index]+((SpeedCurve[index+1]-SpeedCurve[index])*(1-(UpThreshold[index+1]-temp)/(UpThreshold[index+1]-UpThreshold[index])))
+
+    if oldspeed != speed:
+        oldspeed=speed
+        UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
+
+    BiosControl()
+    sleep(PollInterval)
