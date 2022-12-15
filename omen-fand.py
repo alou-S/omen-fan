@@ -6,7 +6,9 @@ from time import sleep
 from sys import argv
 
 ec_file="/sys/kernel/debug/ec/ec0/io"
-gpu_file="/sys/class/hwmon/"+os.listdir('/sys/class/drm/card0/device/hwmon/')[0]+"/temp2_input"
+gpu_temp="/sys/class/hwmon/"+os.listdir('/sys/class/drm/card0/device/hwmon/')[0]+"/temp2_input"
+gpu_state="/sys/class/drm/card0/device/power_state"
+gpu_busy="/sys/class/drm/card0/device/gpu_busy_percent"
 ipc_file="/tmp/omen-fand.PID"
 
 fan1_offset=52 #0x34
@@ -26,6 +28,7 @@ Linear = 1
 PollInterval = 1
 
 doLoop = True
+cooldown = 0
 
 def SigHandler(signal, frame):
     os.remove("/tmp/omen-fand.PID")
@@ -40,12 +43,24 @@ def UpdateFan(speed1, speed2):
         ec.write(bytes([speed2]))
 
 def GetTemp():
-    with open(ec_file, "r+b") as ec:
+    global cooldown
+    with open(ec_file, "rb") as ec:
         ec.seek(cpu_temp_offset)
         tempc = int.from_bytes(ec.read(1), 'big')
-    with open(gpu_file, "r") as gpu:
-        tempg = int(gpu.read())/1000
-    return max(tempc, tempg)
+
+    state = open(gpu_state, "r")
+    if cooldown < 1 and state.read() != "D3cold\n":
+        busy = open(gpu_busy, "r")
+        if busy.read() == '0\n' :   
+            cooldown = 8
+
+        with open(gpu_temp, "r") as temp:
+            tempg = int(temp.read())/1000
+        return max(tempc, tempg)
+    elif cooldown > 1:
+        cooldown-=1
+
+    return tempc
 
 def BiosControl():
     ec = open(ec_file, "r+b")
@@ -106,4 +121,3 @@ elif Linear == 1:
         
         BiosControl()    
         sleep(PollInterval)
-            
