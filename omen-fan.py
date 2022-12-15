@@ -18,10 +18,18 @@ boost_offset=236 #0xEC
 
 fan1_max=55
 fan2_max=57
+DeviceList=["OMEN by HP Laptop 16"]
 
-if (os.geteuid() != 0):
+if os.geteuid() != 0:
     print("  This program should be run as root")
     exit(1)
+
+if any(Devices not in subprocess.getoutput(['dmidecode', \
+    '-s', 'system-product-name']) for Devices in DeviceList):
+    print("  ERROR: Your laptop is not in the list of supported laptops")
+    print("  You may manually force the app to run at your own risk")
+    exit(1)
+
 
 if 'ec_sys' not in str(subprocess.check_output('lsmod')):
     subprocess.run(['modprobe', 'ec_sys', 'write_support=1'])
@@ -147,7 +155,6 @@ elif argv[1] in ('stop', 'd'):
         BiosControl('1')
     else:
         print("  omen-fan service is not running")
-        
 
 elif argv[1] in ('info', 'i'):
     if(os.path.isfile(ipc_file)):
@@ -155,7 +162,7 @@ elif argv[1] in ('info', 'i'):
         print(f"  Service Status : Running (PID: {ipc.read()})")
     else:
         print("  Service Status : Stopped")
-    
+
     ec = open(ec_file, "rb")
     ec.seek(boost_offset)
     if(int.from_bytes(ec.read(1), 'big') == 12):
