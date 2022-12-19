@@ -54,7 +54,7 @@ def GetTemp():
         with open(gpu_temp, "r") as temp:
             tempg = int(temp.read())/1000
         return max(tempc, tempg)
-    elif cooldown > 1:
+    elif cooldown > 0:
         cooldown-=1
 
     return tempc
