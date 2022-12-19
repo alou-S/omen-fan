@@ -10,4 +10,4 @@
 
 # Documentation
 - Use `omen-fan help` to see all available subcommands
-- EC Probe documentation can be found at [docs/probes.md](https://github.com/alou-S/omen-fan/docs/probes.md)
+- EC Probe documentation can be found at [docs/probes.md](https://github.com/alou-S/omen-fan/blob/main/docs/probes.md)
