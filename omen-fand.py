@@ -18,7 +18,7 @@ gpu_temp_offset=183 #0xB7
 fan1_max=55
 fan2_max=57
 
-UpThreshold = [50, 60, 70, 80, 85, 92]
+UpThreshold = [50, 60, 70, 80, 87, 93]
 DownThreshold = [48, 58, 66, 78, 87, 93]
 SpeedCurve = [20, 40, 60, 70, 85, 100]
 Ambient = 0
@@ -49,11 +49,13 @@ def BiosControl():
     ec = open(ec_file, "r+b")
     ec.seek(bios_offset)
     if int.from_bytes(ec.read(1), 'big') != 6:
+        global speed
         ec.seek(bios_offset)
         ec.write(bytes([6]))
         sleep(0.1)
         ec.seek(timer_offset)
         ec.write(bytes([0]))
+        UpdateFan(int(fan1_max*speed/100), int(fan2_max*speed/100))
 
 signal.signal(signal.SIGTERM, SigHandler)
 
