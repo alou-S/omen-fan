@@ -3,12 +3,15 @@
 import os
 import subprocess
 import signal
+import glob
 from time import sleep
 from sys import argv
 
 ec_file="/sys/kernel/debug/ec/ec0/io"
 ipc_file="/tmp/omen-fand.PID"
-boost_file="/sys/class/hwmon/"+os.listdir('/sys/devices/platform/hp-wmi/hwmon/')[0]+"/pwm1_enable"
+boost_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/pwm1_enable")[0]
+fan1_speed_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
+fan2_speed_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
 
 fan1_offset=52 #0x34
 fan2_offset=53 #0x35
@@ -172,10 +175,11 @@ elif argv[1] in ('info', 'i'):
         ec.seek(bios_offset)
         if(int.from_bytes(ec.read(1), 'big') == 6):
             print("  BIOS Control : Disabled")
-            ec.seek(fan1_offset)
-            print(f"  Fan 1 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+            fan1=open(fan1_speed_file, 'r')
+            fan2=open(fan2_speed_file, 'r')
+            print("  Fan 1 : {} RPM".format(fan1.read().replace('\n', '')))
             ec.seek(fan2_offset)
-            print(f"  Fan 2 : {int.from_bytes(ec.read(1), 'big') * 100} RPM")
+            print("  Fan 2 : {} RPM".format(fan2.read().replace('\n', '')))
         else:
             print("  BIOS Control : Enabled")
 
