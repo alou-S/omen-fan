@@ -7,62 +7,68 @@ import glob
 from time import sleep
 from sys import argv
 
-ec_file="/sys/kernel/debug/ec/ec0/io"
-ipc_file="/tmp/omen-fand.PID"
-boost_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/pwm1_enable")[0]
-fan1_speed_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
-fan2_speed_file=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
+ECIO_FILE="/sys/kernel/debug/ec/ec0/io"
+IPC_FILE="/tmp/omen-fand.PID"
+BOOST_FILE=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/pwm1_enable")[0]
+FAN1_SPEED_FILE=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
+FAN2_SPEED_FILE=glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
 
-fan1_offset=52 #0x34
-fan2_offset=53 #0x35
-bios_offset=98 #0x62
-timer_offset=99 #0x63
-boost_offset=236 #0xEC
+FAN1_OFFSET=52 #0x34
+FAN2_OFFSET=53 #0x35
+BIOS_OFFSET=98 #0x62
+TIMER_OFFSET=99 #0x63
+BOOST_OFFSET=236 #0xEC
 
-fan1_max=55
-fan2_max=57
-DeviceList=["OMEN by HP Laptop 16"]
+FAN1_SPEED_MAX=55
+FAN2_SPEED_MAX=57
+DEVICE_LIST=["OMEN by HP Laptop 16"]
 
-if os.geteuid() != 0:
-    print("  This program should be run as root")
-    exit(1)
+def isRoot():
+    if os.geteuid() != 0:
+        print("  This program should be run as root")
+        exit(1)
 
-if any(Devices not in subprocess.getoutput(['dmidecode', \
-    '-s', 'system-product-name']) for Devices in DeviceList):
-    print("  ERROR: Your laptop is not in the list of supported laptops")
-    print("  You may manually force the app to run at your own risk")
-    exit(1)
+def isValidDevice():
+    if any(Devices not in subprocess.getoutput(['dmidecode', \
+        '-s', 'system-product-name']) for Devices in DEVICE_LIST):
+        print("  ERROR: Your laptop is not in the list of supported laptops")
+        print("  You may manually force the app to run at your own risk")
+        exit(1)
 
+def LoadEcModule():
+    if 'ec_sys' not in str(subprocess.check_output('lsmod')):
+        subprocess.run(['modprobe', 'ec_sys', 'write_support=1'])
 
-if 'ec_sys' not in str(subprocess.check_output('lsmod')):
-    subprocess.run(['modprobe', 'ec_sys', 'write_support=1'])
+    if not bool(os.stat(ECIO_FILE).st_mode & 0o200):
+        subprocess.run(['modprobe', '-r', 'ec_sys'])
+        subprocess.run(['modprobe', 'ec_sys', 'write_support=1'])
 
 def UpdateFan(speed1, speed2):
     BiosControl('0')
     print(f"  Set Fan1: {speed1*100} RPM, Set Fan2: {speed2*100} RPM")
-    with open(ec_file, "r+b") as ec:
-        ec.seek(fan1_offset)
+    with open(ECIO_FILE, "r+b") as ec:
+        ec.seek(FAN1_OFFSET)
         ec.write(bytes([speed1]))
-        ec.seek(fan2_offset)
+        ec.seek(FAN2_OFFSET)
         ec.write(bytes([speed2]))
 
 def BiosControl(enabled):
     if enabled == '0':
         print("  WARNING: BIOS Fan Control Disabled")
-        with open(ec_file, "r+b") as ec:
-            ec.seek(bios_offset)
+        with open(ECIO_FILE, "r+b") as ec:
+            ec.seek(BIOS_OFFSET)
             ec.write(bytes([6]))
             sleep(0.1)
-            ec.seek(timer_offset)
+            ec.seek(TIMER_OFFSET)
             ec.write(bytes([0]))
     elif enabled == '1':
         print("  The BIOS now controls Fans")
-        with open(ec_file, "r+b") as ec:
-            ec.seek(bios_offset)
+        with open(ECIO_FILE, "r+b") as ec:
+            ec.seek(BIOS_OFFSET)
             ec.write(bytes([0]))
-            ec.seek(fan1_offset)
+            ec.seek(FAN1_OFFSET)
             ec.write(bytes([0]))
-            ec.seek(fan2_offset)
+            ec.seek(FAN2_OFFSET)
             ec.write(bytes([0]))
     else:
         print("  ERROR: Needs a boolean value (0 or 1)")
@@ -93,6 +99,11 @@ def ParseRPM(rpm, fan, max):
 def NI(var):
     print("    :) Need to implement subcommand", var)
 
+
+isRoot()
+isValidDevice()
+LoadEcModule()
+
 if len(argv) == 1 or argv[1] in ('help', 'h'):
     print("Usage:")
     print(f"    omen-fan <subcommand> <argument>")
@@ -120,10 +131,10 @@ elif argv[1] in ('boost', 'x'):
     if len(argv) < 3:
         print(f"  Subcommand \'{argv[1]}\' needs another argument")
     elif argv[2] == '0':
-        with open(boost_file, 'r+') as boost:
+        with open(BOOST_FILE, 'r+') as boost:
             boost.write('2')
     elif argv[2] == '1':
-        with open(boost_file, 'r+') as boost:
+        with open(BOOST_FILE, 'r+') as boost:
             boost.write('0')
     else:
         print("  ERROR: Needs a boolean value (0 or 1)")
@@ -134,8 +145,8 @@ elif argv[1] in ('configure', 'config', 'c'):
     NI(argv[1])
 
 elif argv[1] in ('start', 'e'):
-    if(os.path.isfile(ipc_file)):
-        ipc = open(ipc_file, "r")
+    if(os.path.isfile(IPC_FILE)):
+        ipc = open(IPC_FILE, "r")
         print(f"  omen-fan service is already running with PID:{ipc.read()}")
     else:
         BiosControl('0')
@@ -143,15 +154,15 @@ elif argv[1] in ('start', 'e'):
         print("  omen-fan service has been started")
 
 elif argv[1] in ('stop', 'd'):
-    if(os.path.isfile(ipc_file)):
-        ipc = open(ipc_file, "r")
+    if(os.path.isfile(IPC_FILE)):
+        ipc = open(IPC_FILE, "r")
 
         try:
             os.kill(int(ipc.read()), signal.SIGTERM)
         except ProcessLookupError:
             print(" PID file exists without process.")
             print(" omen-fan service was killed unexpectedly.")
-            os.remove("/tmp/omen-fand.PID")
+            os.remove(IPC_FILE)
             exit(1)
 
         print("  omen-fan service has been stopped")
@@ -160,25 +171,25 @@ elif argv[1] in ('stop', 'd'):
         print("  omen-fan service is not running")
 
 elif argv[1] in ('info', 'i'):
-    if(os.path.isfile(ipc_file)):
-        ipc = open(ipc_file, "r")
+    if(os.path.isfile(IPC_FILE)):
+        ipc = open(IPC_FILE, "r")
         print(f"  Service Status : Running (PID: {ipc.read()})")
     else:
         print("  Service Status : Stopped")
 
-    ec = open(ec_file, "rb")
-    ec.seek(boost_offset)
+    ec = open(ECIO_FILE, "rb")
+    ec.seek(BOOST_OFFSET)
     if(int.from_bytes(ec.read(1), 'big') == 12):
         print("  Fan Boost : Enalbed")
         print("  Fan speeds are now maxed. BIOS and User controls are ignored")
     else:
-        ec.seek(bios_offset)
+        ec.seek(BIOS_OFFSET)
         if(int.from_bytes(ec.read(1), 'big') == 6):
             print("  BIOS Control : Disabled")
-            fan1=open(fan1_speed_file, 'r')
-            fan2=open(fan2_speed_file, 'r')
+            fan1=open(FAN1_SPEED_FILE, 'r')
+            fan2=open(FAN2_SPEED_FILE, 'r')
             print("  Fan 1 : {} RPM".format(fan1.read().replace('\n', '')))
-            ec.seek(fan2_offset)
+            ec.seek(FAN2_OFFSET)
             print("  Fan 2 : {} RPM".format(fan2.read().replace('\n', '')))
         else:
             print("  BIOS Control : Enabled")
@@ -189,12 +200,12 @@ elif argv[1] in ('set', 's'):
         print(f"  \'omen-fan {argv[1]} <fan-speed>\'")
         print(f"  \'omen-fan {argv[1]} <fan1-speed> <fan2-speed>\'")
     elif len(argv) > 3:
-        UpdateFan(ParseRPM(argv[2], 1, fan1_max), ParseRPM(argv[3], 2, fan2_max))
+        UpdateFan(ParseRPM(argv[2], 1, FAN1_SPEED_MAX), ParseRPM(argv[3], 2, FAN2_SPEED_MAX))
     else:
-        UpdateFan(ParseRPM(argv[2], 1, fan1_max), ParseRPM(argv[2], 2, fan2_max))
+        UpdateFan(ParseRPM(argv[2], 1, FAN1_SPEED_MAX), ParseRPM(argv[2], 2, FAN2_SPEED_MAX))
 
 elif argv[1] in ('version', 'v'):
-    print("  Omen Fan Control v0.1")
+    print("  Omen Fan Control")
     print("  Made and tested on Omen 16-c0xxx by alou-S")
     print("  Beta software, use at your own risk")
 
