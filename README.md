@@ -1,5 +1,6 @@
 # omen-fan
 - A simple utility to manually control the fans of a HP Omen laptop
+- Works on various HP Omen laptop and even some Victus laptops from testing. 
 - Also has a service that actively adjusts the fan speed according to tempertatures (cause the default BIOS control sucks)
 - Supports enabling boost mode via sysfs
 - Made and tested on an Omen 16-c0140AX
