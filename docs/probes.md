@@ -28,7 +28,7 @@ Registers with ? are writable but something effects the system and sometimes doe
 0x57    CPU Temp            int °C
 0xB7    GPU Temp            int °C
 
-0x62*   BIOS Control        00, 01  
+0x62*   BIOS Control        00 (Enabled) , 06 (Disabled)
 0x63*   Timer               Counts down from whatever set to 0.
                             Set to 0x78 (120 secs) when certian EC changes are made.
                             Resets BIOS control and other values when reaches 0.
@@ -38,7 +38,7 @@ Registers with ? are writable but something effects the system and sometimes doe
 ## Power Related
 ```
 0x95*    Performance        Technically Performance Mode. Set to 0x31 to mitigate some
-                            weird perfomance issues and throttling.
+                            weird perfomance issues and throttling. 0x01 for Victus Laptops.
 
                             Found to be tweaked via Omen Gaming Hub when changing performance modes.
                             Ranging from 0x10 to 0x50 in Balanced mode and
