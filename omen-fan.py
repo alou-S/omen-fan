@@ -13,6 +13,7 @@ from click_aliases import ClickAliasedGroup
 
 ECIO_FILE = "/sys/kernel/debug/ec/ec0/io"
 IPC_FILE = "/tmp/omen-fand.PID"
+DEVICE_FILE = "/sys/devices/virtual/dmi/id/product_name"
 BOOST_FILE = glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/pwm1_enable")[0]
 FAN1_SPEED_FILE = glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan1_input")[0]
 FAN2_SPEED_FILE = glob.glob("/sys/devices/platform/hp-wmi/hwmon/*/fan2_input")[0]
@@ -28,17 +29,23 @@ FAN2_SPEED_MAX = 57
 DEVICE_LIST = ["OMEN by HP Laptop 16"]
 
 
-def is_root():
+def is_root(state=0):
     if os.geteuid() != 0:
-        print("  This program should be run as root")
-        sys.exit(1)
+        if state == 1:
+            return False
+        else:
+            print("  Root access is required for this command.")
+            print("  Please run the program as root.")
+            sys.exit(1)
+    else:
+        return True
 
 
 def is_valid_device():
-    if any(
-        devices not in subprocess.getoutput(["dmidecode", "-s", "system-product-name"])
-        for devices in DEVICE_LIST
-    ):
+    with open(DEVICE_FILE, "r") as device_file:
+        device_name = device_file.read()
+
+    if any(devices not in device_name for devices in DEVICE_LIST):
         print("  ERROR: Your laptop is not in the list of supnported laptops")
         print("  You may manually force the app to run at your own risk")
         sys.exit(1)
@@ -115,9 +122,7 @@ def ni(var):
     print("    :) Need to implement subcommand", var)
 
 
-is_root()
 is_valid_device()
-load_ec_module()
 
 
 @click.group(cls=ClickAliasedGroup)
@@ -128,12 +133,16 @@ def cli():
 @cli.command(name="bios-control", aliases=["b"], help="Enable/Disable BIOS control")
 @click.argument("arg", type=bool)
 def bios_control_cli(arg):
+    is_root()
+    load_ec_module()
     bios_control(arg)
 
 
 @cli.command(name="boost", aliases=["x"], help="Enables boost mode via sysfs")
 @click.argument("arg", type=bool)
 def boost_cli(arg):
+    is_root()
+    load_ec_module()
     if arg is False:
         with open(BOOST_FILE, "r+", encoding="utf-8") as file:
             file.write("2")
@@ -152,6 +161,8 @@ def configure_cli():
 @cli.command(name="service", aliases=["e"], help="Start/Stop Fan management service")
 @click.argument("arg", type=str)
 def service_cli(arg):
+    is_root()
+    load_ec_module()
     if arg in ["start", "1"]:
         if os.path.isfile(IPC_FILE):
             with open(IPC_FILE, "r", encoding="utf-8") as ipc:
@@ -183,46 +194,58 @@ def info_cli():
     if os.path.isfile(IPC_FILE):
         with open(IPC_FILE, "r", encoding="utf-8") as ipc:
             print(f"  Service Status : Running (PID: {ipc.read()})")
+            print("  BIOS Control : Disabled")
     else:
         print("  Service Status : Stopped")
-
-    with open(ECIO_FILE, "rb") as ec:
-        ec.seek(BOOST_OFFSET)
-        if int.from_bytes(ec.read(1), "big") == 12:
-            print("  Fan Boost : Enalbed")
-            print("  Fan speeds are now maxed. BIOS and User controls are ignored")
+        if is_root(1):
+            load_ec_module()
+            with open(ECIO_FILE, "rb") as ec:
+                ec.seek(BIOS_OFFSET)
+                if int.from_bytes(ec.read(1), "big") == 6:
+                    print("  BIOS Control : Disabled")
+                else:
+                    print("  BIOS Control : Enabled")
         else:
-            ec.seek(BIOS_OFFSET)
-            if int.from_bytes(ec.read(1), "big") == 6:
-                print("  BIOS Control : Disabled")
-                with open(FAN1_SPEED_FILE, "r", encoding="utf-8") as fan1:
-                    print("  Fan 1 : {} RPM".format(fan1.read().replace("\n", "")))
-                with open(FAN2_SPEED_FILE, "r", encoding="utf-8") as fan2:
-                    print("  Fan 2 : {} RPM".format(fan2.read().replace("\n", "")))
-            else:
-                print("  BIOS Control : Enabled")
+            print("  BIOS Control : Unknown (Need root)")
+
+    with open(FAN1_SPEED_FILE, "r", encoding="utf-8") as fan1:
+        print(f"  Fan 1 : {fan1.read().strip()} RPM")
+    with open(FAN2_SPEED_FILE, "r", encoding="utf-8") as fan2:
+        print(f"  Fan 2 : {fan2.read().strip()} RPM")
+
+    with open(BOOST_FILE, "r", encoding="utf-8") as boost:
+        if boost.read().strip() == "0":
+            print("\n  Fan Boost : Enabled")
+            print("  Fan speeds are now maxed. BIOS and User controls are ignored")
 
 
 @cli.command(
-    name="set", aliases=["s", "set"],
+    name="set",
+    aliases=["s"],
     help="Set Fan Speed (Disables BIOS control) \n\
     Fan speed can be set in Percentage (100%) or RPM/100 (55)",
 )
 @click.argument("arg1", type=str)
 @click.argument("arg2", type=str, required=False)
 def set_cli(arg1, arg2):
+    is_root()
+    load_ec_module()
     if os.path.isfile(IPC_FILE):
         print("  WARNING: omen-fan service running, may override fan speed")
     if arg2 is None:
-        update_fan(parse_rpm(arg1, 1, FAN1_SPEED_MAX), parse_rpm(arg1, 2, FAN2_SPEED_MAX))
+        update_fan(
+            parse_rpm(arg1, 1, FAN1_SPEED_MAX), parse_rpm(arg1, 2, FAN2_SPEED_MAX)
+        )
     else:
-        update_fan(parse_rpm(arg1, 1, FAN1_SPEED_MAX), parse_rpm(arg2, 2, FAN2_SPEED_MAX))
+        update_fan(
+            parse_rpm(arg1, 1, FAN1_SPEED_MAX), parse_rpm(arg2, 2, FAN2_SPEED_MAX)
+        )
 
 
 @cli.command(name="version", aliases=["v"], help="Gives version info")
 def version_cli():
     print("  Omen Fan Control")
-    print("  Version 0.2.0")
+    print("  Version 0.2.1")
     print("  Made and tested on Omen 16-c0xxx by alou-S")
 
 
