@@ -4,10 +4,12 @@ import os
 import signal
 import sys
 from time import sleep
+import tomlkit
 from bisect import bisect_left
 
 ECIO_FILE = "/sys/kernel/debug/ec/ec0/io"
 IPC_FILE = "/tmp/omen-fand.PID"
+CONFIG_FILE = "/etc/omen-fan/config.toml"
 
 FAN1_OFFSET = 52  # 0x34
 FAN2_OFFSET = 53  # 0x35
@@ -19,18 +21,27 @@ GPU_TEMP_OFFSET = 183  # 0xB7
 FAN1_MAX = 55
 FAN2_MAX = 57
 
-TEMP_CURVE = [50, 60, 70, 80, 87, 93]
-SPEED_CURVE = [20, 40, 60, 70, 85, 100]
-IDLE_SPEED = 0
-POLL_INTERVAL = 1
+with open(CONFIG_FILE, "r") as file:
+    doc = tomlkit.loads(file.read())
+    TEMP_CURVE = doc["service"]["TEMP_CURVE"]
+    SPEED_CURVE = doc["service"]["SPEED_CURVE"]
+    IDLE_SPEED = doc["service"]["IDLE_SPEED"]
+    POLL_INTERVAL = doc["service"]["POLL_INTERVAL"]
 
-# Precaulculate slopes to reduce compute time.
+# Precalculate slopes to reduce compute time.
 slope = []
 for i in range(1, len(TEMP_CURVE)):
     speed_diff = SPEED_CURVE[i] - SPEED_CURVE[i - 1]
     temp_diff = TEMP_CURVE[i] - TEMP_CURVE[i - 1]
     slope_val = round(speed_diff / temp_diff, 2)
     slope.append(slope_val)
+
+
+def is_root():
+    if os.geteuid() != 0:
+        print("  Root access is required for this service.")
+        print("  Please run this service as root.")
+        sys.exit(1)
 
 
 def sig_handler(signum, frame):
@@ -80,6 +91,7 @@ with open(IPC_FILE, "w", encoding="utf-8") as ipc:
     ipc.write(str(os.getpid()))
 
 speed_old = -1
+is_root()
 
 while True:
     temp = get_temp()
