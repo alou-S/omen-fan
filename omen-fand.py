@@ -23,10 +23,10 @@ FAN2_MAX = 57
 
 with open(CONFIG_FILE, "r") as file:
     doc = tomlkit.loads(file.read())
-    TEMP_CURVE = doc["service"]["TEMP_CURVE"]
-    SPEED_CURVE = doc["service"]["SPEED_CURVE"]
-    IDLE_SPEED = doc["service"]["IDLE_SPEED"]
-    POLL_INTERVAL = doc["service"]["POLL_INTERVAL"]
+    TEMP_CURVE = doc["service"]["TEMP_CURVE"].unwrap()
+    SPEED_CURVE = doc["service"]["SPEED_CURVE"].unwrap()
+    IDLE_SPEED = doc["service"]["IDLE_SPEED"].unwrap()
+    POLL_INTERVAL = doc["service"]["POLL_INTERVAL"].unwrap()
 
 # Precalculate slopes to reduce compute time.
 slope = []
