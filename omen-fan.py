@@ -256,7 +256,7 @@ def service_cli(arg):
             subprocess.Popen("omen-fand")
             print("  omen-fan service has been started")
 
-    if arg in ["stop", "0"]:
+    elif arg in ["stop", "0"]:
         if os.path.isfile(IPC_FILE):
             with open(IPC_FILE, "r", encoding="utf-8") as ipc:
                 try:
@@ -271,6 +271,9 @@ def service_cli(arg):
             bios_control(True)
         else:
             print("  omen-fan service is not running")
+
+    else:
+        print("  Please enter a valid argument stop/start (0/1)")
 
 
 @cli.command(name="info", aliases=["i"], help="Gets Fan status")
