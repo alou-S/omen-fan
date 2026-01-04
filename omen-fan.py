@@ -53,6 +53,7 @@ def startup_check():
         doc["service"]["SPEED_CURVE"] = [20, 40, 60, 70, 85, 100]
         doc["service"]["IDLE_SPEED"] = 0
         doc["service"]["POLL_INTERVAL"] = 1
+        doc["service"]["BOXCAR_LENGTH"] = 5
 
         doc.add("script", tomlkit.table())
         doc["script"]["BYPASS_DEVICE_CHECK"] = 0

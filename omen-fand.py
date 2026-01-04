@@ -27,6 +27,7 @@ with open(CONFIG_FILE, "r") as file:
     SPEED_CURVE = doc["service"]["SPEED_CURVE"].unwrap()
     IDLE_SPEED = doc["service"]["IDLE_SPEED"].unwrap()
     POLL_INTERVAL = doc["service"]["POLL_INTERVAL"].unwrap()
+    BOXCAR_LENGTH = doc["service"]["BOXCAR_LENGTH"].unwrap()
 
 # Precalculate slopes to reduce compute time.
 slope = []
@@ -91,10 +92,18 @@ with open(IPC_FILE, "w", encoding="utf-8") as ipc:
     ipc.write(str(os.getpid()))
 
 speed_old = -1
+temp_old = [get_temp()] * BOXCAR_LENGTH
 is_root()
 
 while True:
-    temp = get_temp()
+    temp = 0
+    for i in range(0, BOXCAR_LENGTH - 1):
+        temp_old[i] = temp_old[i + 1]
+        temp = temp + temp_old[i]
+
+    temp_old[BOXCAR_LENGTH - 1] = get_temp()
+    temp = temp + temp_old[BOXCAR_LENGTH - 1]
+    temp = temp / BOXCAR_LENGTH
 
     if temp <= TEMP_CURVE[0]:
         speed = IDLE_SPEED
