@@ -19,7 +19,9 @@ Registers with ? are writable but something effects the system and sometimes doe
 0x2F    Fan 2 Speed %       Range 0 - 0x64 (100)
 0xB3    Fan 2 Speed         Range 0 - 0x16 
 
-0xEC?   Fan Boost           00 (Boost OFF), 0x0C (Boost ON)
+0xEC*   Fan Boost           00 (Boost OFF), 0x0C (Boost ON on some models)
+                            On board 84DB (OMEN 15-dc0xxx, Linux): write 1 = max,
+                            write 0 = auto — see hp-omen-fan-linux test results
 0xF4*   Fan State           00 (Enable), 02 (Disable)
 ```
 
