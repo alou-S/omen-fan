@@ -28,7 +28,9 @@ BOOST_OFFSET = 236  # 0xEC
 
 FAN1_SPEED_MAX = 55
 FAN2_SPEED_MAX = 57
-DEVICE_LIST = ["OMEN by HP Laptop 16"]
+DEVICE_LIST = ["OMEN by HP Laptop 16", "OMEN by HP Laptop 15"]
+# Legacy OMEN 15 (2018-2019): WMI pwm1_enable max fails; EC 0xEC works with value 1.
+EC_FAN_BOOST_BOARDS = {"84DA", "84DB", "84DC"}
 
 
 def is_root(state=0):
@@ -113,6 +115,29 @@ def update_fan(speed1, speed2):
         ec.write(bytes([speed2]))
 
 
+def board_uses_ec_fan_boost():
+    try:
+        with open("/sys/class/dmi/id/board_name", "r", encoding="utf-8") as f:
+            return f.read().strip() in EC_FAN_BOOST_BOARDS
+    except OSError:
+        return False
+
+
+def ec_fan_boost(enabled):
+    with open(ECIO_FILE, "r+b") as ec:
+        ec.seek(BOOST_OFFSET)
+        ec.write(bytes([1 if enabled else 0]))
+
+
+def set_fan_boost(enabled):
+    """Enable or disable fan boost via sysfs or EC fallback."""
+    if board_uses_ec_fan_boost():
+        ec_fan_boost(enabled)
+        return
+    with open(BOOST_FILE, "r+", encoding="utf-8") as file:
+        file.write("2" if not enabled else "0")
+
+
 def bios_control(enabled):
     if enabled is False:
         print("  WARNING: BIOS Fan Control Disabled")
@@ -182,12 +207,7 @@ def bios_control_cli(arg):
 def boost_cli(arg):
     is_root()
     load_ec_module()
-    if arg is False:
-        with open(BOOST_FILE, "r+", encoding="utf-8") as file:
-            file.write("2")
-    elif arg is True:
-        with open(BOOST_FILE, "r+", encoding="utf-8") as file:
-            file.write("0")
+    set_fan_boost(arg)
 
 
 @cli.command(
@@ -302,10 +322,18 @@ def info_cli():
     with open(FAN2_SPEED_FILE, "r", encoding="utf-8") as fan2:
         print(f"  Fan 2 : {fan2.read().strip()} RPM")
 
-    with open(BOOST_FILE, "r", encoding="utf-8") as boost:
-        if boost.read().strip() == "0":
-            print("\n  Fan Boost : Enabled")
-            print("  Fan speeds are now maxed. BIOS and User controls are ignored")
+    boost_enabled = False
+    if board_uses_ec_fan_boost() and is_root(1):
+        load_ec_module()
+        with open(ECIO_FILE, "rb") as ec:
+            ec.seek(BOOST_OFFSET)
+            boost_enabled = int.from_bytes(ec.read(1), "big") == 1
+    else:
+        with open(BOOST_FILE, "r", encoding="utf-8") as boost:
+            boost_enabled = boost.read().strip() == "0"
+    if boost_enabled:
+        print("\n  Fan Boost : Enabled")
+        print("  Fan speeds are now maxed. BIOS and User controls are ignored")
 
 
 @cli.command(
